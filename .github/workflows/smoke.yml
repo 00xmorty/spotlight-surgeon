@@ -1,0 +1,17 @@
+name: smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  smoke:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax check
+        run: zsh -n spotlight-surgeon
+      - name: Smoke test
+        run: bash tests/smoke.sh

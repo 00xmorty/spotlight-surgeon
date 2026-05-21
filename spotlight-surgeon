@@ -1,0 +1,189 @@
+#!/usr/bin/env zsh
+set -euo pipefail
+
+VERSION="0.1.0"
+DRY_RUN=0
+YES=0
+VERBOSE=0
+JSON=0
+COMMAND="help"
+VERIFY_APP="Safari"
+
+usage() {
+  cat <<'EOF'
+Spotlight Surgeon — safe macOS Spotlight app-search repair helper
+
+Usage:
+  spotlight-surgeon <command> [options]
+
+Commands:
+  doctor              Read-only diagnostics: Spotlight status + app-search smoke test
+  status              Show Spotlight indexing status
+  apps                Rebuild LaunchServices app registry (explains before running)
+  fix                 Erase/rebuild Spotlight index for / (confirmation required)
+  verify [AppName]    Check whether Spotlight can find an application
+  help                Show this help
+
+Options:
+  --dry-run           Print commands without executing them
+  --yes               Skip confirmation prompts for guarded repair commands
+  --verbose           Print extra details
+  --json              Reserved for future structured output
+
+Examples:
+  spotlight-surgeon doctor
+  spotlight-surgeon apps --dry-run
+  spotlight-surgeon fix --dry-run
+  spotlight-surgeon verify Safari
+EOF
+}
+
+log() { print -r -- "$*"; }
+warn() { print -r -- "WARN: $*" >&2; }
+err() { print -r -- "ERROR: $*" >&2; }
+
+find_lsregister() {
+  local p
+  for p in \
+    "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister" \
+    "/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"; do
+    [[ -x "$p" ]] && { print -r -- "$p"; return 0; }
+  done
+  return 1
+}
+
+quote_cmd() {
+  local out=()
+  local arg
+  for arg in "$@"; do
+    out+=("${(q)arg}")
+  done
+  print -r -- "${(j: :)out}"
+}
+
+run_cmd() {
+  local label="$1"
+  shift
+  local cmd
+  cmd="$(quote_cmd "$@")"
+  log "→ $label"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log "DRY RUN: $cmd"
+    return 0
+  fi
+  [[ "$VERBOSE" -eq 1 ]] && log "RUN: $cmd"
+  "$@"
+}
+
+confirm() {
+  local prompt="$1"
+  if [[ "$YES" -eq 1 ]]; then
+    log "Confirmation skipped via --yes."
+    return 0
+  fi
+  if [[ ! -t 0 ]]; then
+    err "Confirmation required. Re-run with --yes if you understand the risk, or use --dry-run first."
+    return 2
+  fi
+  print -n -- "$prompt [y/N] "
+  local answer
+  read -r answer
+  case "${answer:l}" in
+    y|yes) return 0 ;;
+    *) warn "Cancelled."; return 1 ;;
+  esac
+}
+
+cmd_status() {
+  log "Spotlight Surgeon v$VERSION — Spotlight status"
+  run_cmd "Check Spotlight indexing status for root volume" mdutil -s /
+}
+
+cmd_verify() {
+  local app_name="${1:-$VERIFY_APP}"
+  log "Spotlight Surgeon v$VERSION — verify app search: $app_name"
+  run_cmd "Search Spotlight application metadata for $app_name" mdfind "kMDItemKind == 'Application' && kMDItemDisplayName == '*$app_name*'"
+}
+
+cmd_doctor() {
+  log "Spotlight Surgeon v$VERSION — doctor"
+  cmd_status
+  log ""
+  cmd_verify "Safari"
+  log ""
+  local lsreg
+  if lsreg="$(find_lsregister)"; then
+    log "LaunchServices tool found: $lsreg"
+  else
+    warn "lsregister not found in expected system paths."
+  fi
+}
+
+cmd_apps() {
+  log "Spotlight Surgeon v$VERSION — LaunchServices app registry repair"
+  log "This rebuilds macOS LaunchServices app registration. It does not delete apps or user files."
+  local lsreg
+  if ! lsreg="$(find_lsregister)"; then
+    err "lsregister not found. Cannot continue."
+    return 1
+  fi
+  if [[ "$DRY_RUN" -ne 1 ]]; then
+    confirm "Rebuild LaunchServices registry now?" || return $?
+  fi
+  run_cmd "Rebuild LaunchServices registry" "$lsreg" -kill -r -domain local -domain system -domain user
+}
+
+cmd_fix() {
+  log "Spotlight Surgeon v$VERSION — Spotlight reindex repair"
+  log "This asks Spotlight to erase and rebuild the index for /. It may take time and temporarily use CPU/disk."
+  log "It does not delete user files."
+  if [[ "$DRY_RUN" -ne 1 ]]; then
+    confirm "Erase and rebuild the Spotlight index for / now?" || return $?
+  fi
+  run_cmd "Erase/rebuild Spotlight index for root volume" mdutil -E /
+}
+
+parse_args() {
+  local positional=()
+  local command_set=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dry-run) DRY_RUN=1 ;;
+      --yes|-y) YES=1 ;;
+      --verbose|-v) VERBOSE=1 ;;
+      --json) JSON=1 ;;
+      --help|-h) COMMAND="help"; command_set=1 ;;
+      --version) log "$VERSION"; exit 0 ;;
+      --*) err "Unknown option: $1"; exit 2 ;;
+      *)
+        if [[ "$command_set" -eq 0 ]]; then
+          COMMAND="$1"
+          command_set=1
+        else
+          positional+=("$1")
+        fi
+        ;;
+    esac
+    shift
+  done
+
+  if [[ ${#positional[@]} -gt 0 ]]; then
+    VERIFY_APP="${(j: :)positional}"
+  fi
+}
+
+main() {
+  parse_args "$@"
+  case "$COMMAND" in
+    help|"") usage ;;
+    status) cmd_status ;;
+    doctor) cmd_doctor ;;
+    apps) cmd_apps ;;
+    fix) cmd_fix ;;
+    verify) cmd_verify "$VERIFY_APP" ;;
+    *) err "Unknown command: $COMMAND"; usage; return 2 ;;
+  esac
+}
+
+main "$@"
