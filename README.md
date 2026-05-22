@@ -4,6 +4,10 @@ Fix macOS Spotlight app search and ghost app entries with a transparent one-file
 
 Spotlight Surgeon is a small macOS utility for people who search apps from Spotlight and hit weird failures: apps not appearing, duplicate/ghost entries, or stale LaunchServices metadata. It does not delete apps or user files. It shows the exact system commands it will run and supports dry-run mode.
 
+## Demo
+
+![Spotlight Surgeon terminal demo](assets/spotlight-surgeon-demo.gif)
+
 ## Install
 
 ### Option 1: clone and run
