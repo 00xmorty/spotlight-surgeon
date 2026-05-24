@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Spotlight Surgeon Demo GIF</title>
+  <script src="../node_modules/p5/lib/p5.min.js"></script>
+  <style>
+    html, body { margin: 0; padding: 0; overflow: hidden; background: #080b11; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+<script>
+p5.disableFriendlyErrors = true;
+
+const W = 960;
+const H = 540;
+const FPS = 15;
+const TOTAL_FRAMES = 135;
+const BG = '#080b11';
+const PANEL = '#121826';
+const PANEL_2 = '#1b2333';
+const TEXT = '#eff6ff';
+const MUTED = '#93a4bf';
+const GREEN = '#81c995';
+const BLUE = '#8ab4f8';
+const YELLOW = '#fdd663';
+const RED = '#f28b82';
+const PURPLE = '#c58af9';
+
+const transcript = [
+  ['$ ./spotlight-surgeon doctor --dry-run', BLUE],
+  ['Spotlight Surgeon v0.1.0 — doctor', TEXT],
+  ['✓ Spotlight status check', GREEN],
+  ['DRY RUN: mdutil -s /', YELLOW],
+  ['', TEXT],
+  ['✓ Verify app search: Safari', GREEN],
+  ['DRY RUN: mdfind "...Safari..."', YELLOW],
+  ['LaunchServices tool found: /System/Library/.../lsregister', MUTED],
+  ['', TEXT],
+  ['$ ./spotlight-surgeon apps --dry-run', BLUE],
+  ['Transparent repair plan:', TEXT],
+  ['  rebuild LaunchServices registry', GREEN],
+  ['DRY RUN: .../lsregister -kill -r -domain local -domain system -domain user', YELLOW],
+  ['', TEXT],
+  ['$ ./spotlight-surgeon fix --dry-run', BLUE],
+  ['This asks Spotlight to rebuild /', TEXT],
+  ['It does not delete user files.', GREEN],
+  ['DRY RUN: mdutil -E /', YELLOW],
+];
+
+function setup() {
+  createCanvas(W, H);
+  pixelDensity(1);
+  frameRate(FPS);
+  noLoop();
+  textFont('Menlo, Monaco, Consolas, monospace');
+  window._p5Ready = true;
+  window._totalFrames = TOTAL_FRAMES;
+}
+
+function roundPanel(x, y, w, h, r, fillColor, strokeColor = '#354259') {
+  push();
+  fill(fillColor);
+  stroke(strokeColor);
+  strokeWeight(1);
+  rect(x, y, w, h, r);
+  pop();
+}
+
+function ease(t) { return t * t * (3 - 2 * t); }
+function clamp01(x) { return max(0, min(1, x)); }
+
+function visibleLineCount(f) {
+  if (f < 30) return 0;
+  return min(transcript.length, floor((f - 30) / 4) + 1);
+}
+
+function typedPrompt(f) {
+  const prompt = transcript[0][0];
+  const n = floor(map(clamp01(f / 28), 0, 1, 0, prompt.length));
+  return prompt.slice(0, n);
+}
+
+function drawBackground(f) {
+  background(BG);
+  noStroke();
+  const t = f / TOTAL_FRAMES;
+
+  for (let i = 0; i < 3; i++) {
+    const phase = t * TWO_PI + i * 2.1;
+    const x = [92, 755, 835][i] + sin(phase) * [18, 28, 20][i];
+    const y = [76, 55, 420][i] + cos(phase * 0.8) * [16, 19, 12][i];
+    const colors = [[24, 72, 130, 44], [94, 54, 147, 38], [38, 120, 128, 34]];
+    fill(...colors[i]);
+    circle(x, y, [300, 260, 290][i]);
+  }
+
+  // subtle scanlines/grain-like tactical texture
+  stroke(255, 255, 255, 9);
+  strokeWeight(1);
+  for (let y = 0; y < H; y += 4) line(0, y, W, y);
+}
+
+function drawHeader(f) {
+  const shimmer = 0.5 + 0.5 * sin(f * 0.08);
+  noStroke();
+  fill(TEXT);
+  textSize(36);
+  textStyle(BOLD);
+  text('Spotlight Surgeon', 52, 62);
+  textStyle(NORMAL);
+  fill(MUTED);
+  textSize(17);
+  text('safe macOS Spotlight app-search repair helper', 54, 94);
+
+  roundPanel(650, 50, 250, 78, 20, PANEL, '#334056');
+  fill(TEXT); textSize(16); textStyle(BOLD); text('Safety model', 676, 78); textStyle(NORMAL);
+  fill(lerpColor(color(GREEN), color('#d7ffd8'), shimmer));
+  textSize(13); text('dry-run first · explains commands', 676, 106);
+}
+
+function drawTerminal(f) {
+  const x0 = 52, y0 = 146, tw = 856, th = 326;
+  roundPanel(x0, y0, tw, th, 22, PANEL, '#344058');
+  noStroke(); fill(PANEL_2); rect(x0, y0, tw, 42, 22, 22, 0, 0);
+  fill(RED); circle(x0 + 25, y0 + 21, 11);
+  fill(YELLOW); circle(x0 + 47, y0 + 21, 11);
+  fill(GREEN); circle(x0 + 69, y0 + 21, 11);
+  fill(MUTED); textSize(13); text('~/spotlight-surgeon', x0 + 96, y0 + 26);
+
+  const count = visibleLineCount(f);
+  let y = y0 + 66;
+  textSize(17);
+  for (let i = 0; i < count; i++) {
+    const [line, col] = transcript[i];
+    fill(col);
+    text(line, x0 + 24, y);
+    y += 22;
+  }
+  if (count === 0) {
+    fill(BLUE);
+    const cursor = floor(f / 6) % 2 === 0 ? '▌' : '';
+    text(typedPrompt(f) + cursor, x0 + 24, y);
+  }
+
+  // progress pulse under the terminal title bar
+  const p = clamp01((f - 25) / 95);
+  noStroke(); fill(52, 211, 153, 125);
+  rect(x0, y0 + 41, tw * p, 2);
+}
+
+function drawFooter(f) {
+  const badges = [
+    ['no files deleted', GREEN],
+    ['native macOS tools', BLUE],
+    ['transparent repair', PURPLE],
+  ];
+  let x = 52;
+  for (const [label, col] of badges) {
+    const w = textWidth(label) + 30;
+    roundPanel(x, 492, w, 31, 16, '#101722', '#445168');
+    fill(col); noStroke(); textSize(13); text(label, x + 15, 512);
+    x += w + 14;
+  }
+
+  const glow = ease(clamp01((f - 104) / 18));
+  if (glow > 0) {
+    fill(129, 201, 149, 36 * glow); noStroke();
+    rect(0, 0, W, H);
+    fill(GREEN); textSize(15); textStyle(BOLD);
+    text('Ready: safe diagnosis before repair', 650, 512);
+    textStyle(NORMAL);
+  }
+}
+
+function draw() {
+  const f = frameCount - 1;
+  drawBackground(f);
+  drawHeader(f);
+  drawTerminal(f);
+  drawFooter(f);
+}
+</script>
+</body>
+</html>

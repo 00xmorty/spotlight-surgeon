@@ -1,0 +1,13 @@
+{
+  "name": "spotlight-surgeon-demo-assets",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Deterministic p5.js/Puppeteer render pipeline for Spotlight Surgeon demo GIF assets.",
+  "scripts": {
+    "demo:gif": "node scripts/render_demo_gif.mjs"
+  },
+  "devDependencies": {
+    "p5": "^2.2.3",
+    "puppeteer-core": "^25.0.4"
+  }
+}
